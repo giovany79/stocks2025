@@ -1,4 +1,4 @@
-# Sentiment Analysis with OpenAI API
+# Stock Analysis
 
 # Setup
 
