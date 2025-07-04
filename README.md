@@ -95,3 +95,4 @@ The application provides:
 
 - Alpha Vantage API: https://www.alphavantage.co/documentation/
 - Balance Sheet Documentation: https://www.alphavantage.co/documentation/#balance-sheet
+- OpenAI API: https://platform.openai.com/docs/api-reference
