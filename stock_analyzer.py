@@ -50,6 +50,7 @@ class StockAnalyzer:
                 return None
                 
             first_row = data.iloc[0]
+            print(first_row)
             balance_sheet = {
                 'report_date': first_row['fiscalDateEnding'],
                 'total_assets': self._to_float(first_row['totalAssets']),
@@ -57,7 +58,9 @@ class StockAnalyzer:
                 'total_liabilities': self._to_float(first_row['totalLiabilities']),
                 'current_liabilities': self._to_float(first_row['totalCurrentLiabilities']),
                 'total_shareholder_equity': self._to_float(first_row['totalShareholderEquity']),
-                'retained_earnings': self._to_float(first_row['retainedEarnings'])
+                'retained_earnings': self._to_float(first_row['retainedEarnings']),
+                'short_long_term_debt_total': self._to_float(first_row['shortLongTermDebtTotal']),
+                'cash_and_cash_equivalents': self._to_float(first_row.get('cashAndCashEquivalentsAtCarryingValue', '0'))
             }
 
             # Add additional financial metrics if available
@@ -72,7 +75,7 @@ class StockAnalyzer:
             print(f"Error getting balance sheet data: {str(e)}")
             return None
 
-    def analyze_financial_health(self, balance_sheet: Dict[str, Any]) -> str:
+    def analyze_financial_health(self, balance_sheet: Dict[str, Any], ratios: Dict[str, float]) -> str:
         """
         Analyze financial health using OpenAI
         Args:
@@ -81,18 +84,26 @@ class StockAnalyzer:
             str: Analysis from OpenAI
         """
         try:
-            prompt = (
-                "Eres un experto en análisis financiero. Analiza la salud financiera de la empresa "
-                "con los siguientes datos: {data}. Calcula los ratios de liquidez (current ratio, "
-                "cash ratio) y solvencia (debt-equity ratio). Proporciona una interpretación "
-                "de los valores y una conclusión general sobre la salud financiera."
+            prompt1 = (
+                "Analiza la salud financiera de la empresa "
+                "con los siguientes datos: {data}. Proporciona una interpretación del balance"
             ).format(data=json.dumps(balance_sheet, indent=2))
+            prompt2 = (
+                "Analiza la salud financiera de la empresa "
+                "con los siguientes datos: {ratios}. Proporciona una interpretación de los ratios y obtener conclusiones de solvencia y liquidez"
+                "Debt Equity se interpreta que la deuda financiera es X% de su patrimonio"
+                "Current ratio se interpreta como que los activos equivalen al X% de los pasivos corrientes"
+                "Cash ratio se interpreta que la empresa tiene efectivo para cubrir el X% de los pasivos corrientes"
+                "Debt to equity ratio se interpreta que la deuda financiera es X% de su patrimonio"
+                "Al final determinar si la empresa es solvente y si es liquida con un analisis profundo"
+            ).format(ratios=json.dumps(ratios, indent=2))
 
             completion = self.openai_client.chat.completions.create(
                 model="gpt-4.1",
                 messages=[
                     {"role": "system", "content": "Eres un experto en análisis financiero"},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt1},
+                    {"role": "user", "content": prompt2}
                 ],
                 max_tokens=2000,
                 temperature=0.2,
@@ -129,7 +140,8 @@ def format_balance_sheet(balance_sheet: Dict[str, Any]) -> str:
         f"Total Liabilities: ${balance_sheet['total_liabilities']:,.2f}",
         f"Current Liabilities: ${balance_sheet['current_liabilities']:,.2f}",
         f"Total Shareholder Equity: ${balance_sheet['total_shareholder_equity']:,.2f}",
-        f"Retained Earnings: ${balance_sheet['retained_earnings']:,.2f}"
+        f"Retained Earnings: ${balance_sheet['retained_earnings']:,.2f}",
+        f"Cash and Cash Equivalents: ${balance_sheet['cash_and_cash_equivalents']:,.2f}",
     ]
 
     # Add additional metrics if available
@@ -138,6 +150,14 @@ def format_balance_sheet(balance_sheet: Dict[str, Any]) -> str:
             formatted.append(f"{metric.replace('_', ' ').title()}: ${balance_sheet[metric]:,.2f}")
 
     return "\n".join(formatted)
+
+def calculate_ratios(balance_sheet: Dict[str, Any]) -> Dict[str, float]:
+    ratios = {}
+    ratios['current_ratio'] = balance_sheet['current_assets'] / balance_sheet['current_liabilities']
+    ratios['cash_ratio'] = balance_sheet['cash_and_cash_equivalents'] / balance_sheet['current_liabilities']
+    ratios['debt_index'] = balance_sheet['total_liabilities'] / balance_sheet['total_shareholder_equity']
+    ratios['debt_equity'] = balance_sheet['short_long_term_debt_total'] / balance_sheet['total_shareholder_equity']
+    return ratios
 
 def main():
     """Main function to run the stock analyzer"""
@@ -152,6 +172,9 @@ def main():
     
     # Get balance sheet data
     balance_sheet = analyzer.get_balance_sheet(stock_symbol)
+
+    # Get ratios
+    ratios = calculate_ratios(balance_sheet)
     
     # Display results
     print("\nStock Information:")
@@ -165,12 +188,19 @@ def main():
         # Print formatted data
         print("\nFormatted Data:")
         print(format_balance_sheet(balance_sheet))
+
+        # Print ratios
+        print("\nFinancial Ratios:")
+        print("-" * 20)
+        print(json.dumps(ratios, indent=4))
         
         # Get and print financial analysis
-        analysis = analyzer.analyze_financial_health(balance_sheet)
+        analysis = analyzer.analyze_financial_health(balance_sheet,ratios)
         print("\nFinancial Analysis:")
         print("-" * 20)
         print(analysis)
+        
+        
     else:
         print("No data available for this stock symbol")
 
